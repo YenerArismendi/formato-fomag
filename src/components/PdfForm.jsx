@@ -24,14 +24,18 @@ const PdfForm = ({ fields, onEdit }) => {
         const scale = width / 800; 
 
         const text = formData[field.id] || '';
+        const value = field.type === 'checkbox' ? (formData[field.id] ? 'X' : '') : text;
+        
+        if (field.type === 'checkbox' && !formData[field.id]) return;
+
         const fontSize = 9 * scale;
-        const textWidth = helveticaBold.widthOfTextAtSize(text, fontSize);
+        const textToDraw = field.type === 'checkbox' ? 'X' : text;
+        const textWidth = helveticaBold.widthOfTextAtSize(textToDraw, fontSize);
         const fieldWidth = field.width * scale;
         
-        // Calculate centered X: start pos + (fieldWidth/2) - (textWidth/2)
         const centeredX = (field.x * scale) + (fieldWidth / 2) - (textWidth / 2);
 
-        page.drawText(text, {
+        page.drawText(textToDraw, {
           x: centeredX,
           y: height - (field.y * scale) - (12 * scale), 
           size: fontSize,
@@ -41,8 +45,6 @@ const PdfForm = ({ fields, onEdit }) => {
       });
 
       const pdfBytes = await pdfDoc.save();
-
-      // Trigger download
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -53,28 +55,6 @@ const PdfForm = ({ fields, onEdit }) => {
       alert('Hubo un error al generar el PDF.');
     }
   };
-
-  if (fields.length === 0) {
-    return (
-      <div className="pdf-form-container">
-        <div className="form-card empty">
-           <h2>Configuración Necesaria</h2>
-           <p style={{ margin: '1rem 0', color: '#94a3b8' }}>
-             <strong>¿Por qué no veo campos?</strong><br/>
-             Este PDF es un documento "plano" (sin campos digitales).<br/>
-             Necesitas indicarle al programa dónde escribir los datos.
-           </p>
-           <p style={{ marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-             Solo tienes que hacerlo <strong>una vez</strong>. La configuración se guardará.
-           </p>
-           <button className="btn-primary" onClick={onEdit}>
-             <Edit2 size={16} />
-             Comenzar a Mapear
-           </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="pdf-form-container">
@@ -89,14 +69,25 @@ const PdfForm = ({ fields, onEdit }) => {
 
         <div className="form-grid">
           {fields.map(field => (
-            <div key={field.id} className="form-group">
+            <div key={field.id} className={`form-group ${field.type === 'checkbox' ? 'as-checkbox' : ''}`}>
               <label>{field.name}</label>
-              <input
-                type="text"
-                value={formData[field.id]}
-                onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                placeholder={`Ingrese ${field.name}`}
-              />
+              {field.type === 'checkbox' ? (
+                <div className="checkbox-wrapper">
+                  <input
+                    type="checkbox"
+                    checked={formData[field.id] || false}
+                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
+                  />
+                  <span>Marcar con X</span>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={formData[field.id] || ''}
+                  onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                  placeholder={`Ingrese ${field.name}`}
+                />
+              )}
             </div>
           ))}
         </div>

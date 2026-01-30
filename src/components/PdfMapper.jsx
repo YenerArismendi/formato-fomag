@@ -83,7 +83,7 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
 
     // Default field size (approximate)
     const newField = {
-      id: Date.now(),
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: `Field ${fields.length + 1}`,
       page: pageIndex,
       x,
@@ -129,17 +129,6 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
 
   const [draggedIndex, setDraggedIndex] = useState(null);
 
-  const moveField = (index, direction) => {
-    const newFields = [...fields];
-    const newIndex = index + direction;
-    if (newIndex >= 0 && newIndex < newFields.length) {
-      const temp = newFields[index];
-      newFields[index] = newFields[newIndex];
-      newFields[newIndex] = temp;
-      setFields(newFields);
-    }
-  };
-
   const onDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = "move";
@@ -160,6 +149,12 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
     setFields(newFields);
   };
 
+  const toggleFieldType = (id) => {
+    setFields(fields.map(f => 
+      f.id === id ? { ...f, type: f.type === 'checkbox' ? 'text' : 'checkbox' } : f
+    ));
+  };
+
   return (
     <div className="pdf-mapper">
       <div className="sidebar">
@@ -178,19 +173,36 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
           {fields.map((field, index) => (
             <div 
               key={field.id} 
-              className={`field-item ${draggedIndex === index ? 'dragging' : ''}`}
+              className={`field-item ${draggedIndex === index ? 'dragging' : ''} ${field.type === 'checkbox' ? 'type-checkbox' : ''}`}
               draggable
               onDragStart={(e) => onDragStart(e, index)}
               onDragOver={(e) => onDragOver(e, index)}
               onDragEnd={() => setDraggedIndex(null)}
             >
               <div className="field-number">{index + 1}</div>
-              <input 
-                value={field.name}
-                onChange={(e) => updateFieldName(field.id, e.target.value)}
-                placeholder="Nombre del campo"
-                title="Arrastra para reordenar"
-              />
+              <div className="field-content-box">
+                <input 
+                  value={field.name}
+                  onChange={(e) => updateFieldName(field.id, e.target.value)}
+                  placeholder="Nombre del campo"
+                  title="Arrastra para reordenar"
+                />
+                <div className="field-type-toggle">
+                  <button 
+                    className={`type-btn ${field.type !== 'checkbox' ? 'active' : ''}`}
+                    onClick={() => setFields(fields.map(f => f.id === field.id ? { ...f, type: 'text' } : f))}
+                  >
+                    T
+                  </button>
+                  <button 
+                    className={`type-btn ${field.type === 'checkbox' ? 'active' : ''}`}
+                    onClick={() => setFields(fields.map(f => f.id === field.id ? { ...f, type: 'checkbox' } : f))}
+                    title="Marca (X)"
+                  >
+                    X
+                  </button>
+                </div>
+              </div>
               <button 
                 className="btn-icon danger" 
                 onClick={() => removeField(field.id)}
@@ -266,8 +278,8 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
                        // Invert Y axis: Height - Y
                        const y = (viewport.height - pdfY) * scale;
 
-                       newFields.push({
-                         id: Date.now() + Math.random(),
+                        newFields.push({
+                          id: `auto-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
                          name: item.str,
                          page: i - 1, // 0-indexed
                          x: x, 
