@@ -266,7 +266,7 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
           </div>
         ) : (
           <Document
-            file="/formato.pdf"
+            file={`${import.meta.env.BASE_URL}formato.pdf`.replace(/\/+/g, '/')}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             className="pdf-document"

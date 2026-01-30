@@ -11,7 +11,8 @@ const PdfForm = ({ fields, onEdit }) => {
   const handleDownload = async () => {
     try {
       // Load the existing PDF
-      const existingPdfBytes = await fetch('/formato.pdf').then(res => res.arrayBuffer());
+      const pdfPath = `${import.meta.env.BASE_URL}formato.pdf`.replace(/\/+/g, '/');
+      const existingPdfBytes = await fetch(pdfPath).then(res => res.arrayBuffer());
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
       const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const pages = pdfDoc.getPages();
