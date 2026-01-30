@@ -24,11 +24,17 @@ const PdfForm = ({ fields, onEdit }) => {
         const scale = width / 800; 
 
         const text = formData[field.id] || '';
+        const fontSize = 9 * scale;
+        const textWidth = helveticaBold.widthOfTextAtSize(text, fontSize);
+        const fieldWidth = field.width * scale;
         
+        // Calculate centered X: start pos + (fieldWidth/2) - (textWidth/2)
+        const centeredX = (field.x * scale) + (fieldWidth / 2) - (textWidth / 2);
+
         page.drawText(text, {
-          x: field.x * scale,
+          x: centeredX,
           y: height - (field.y * scale) - (12 * scale), 
-          size: 9 * scale,
+          size: fontSize,
           font: helveticaBold,
           color: rgb(0, 0, 0),
         });

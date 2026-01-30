@@ -127,6 +127,39 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
     setFields(fields.map(f => f.id === id ? { ...f, name } : f));
   };
 
+  const [draggedIndex, setDraggedIndex] = useState(null);
+
+  const moveField = (index, direction) => {
+    const newFields = [...fields];
+    const newIndex = index + direction;
+    if (newIndex >= 0 && newIndex < newFields.length) {
+      const temp = newFields[index];
+      newFields[index] = newFields[newIndex];
+      newFields[newIndex] = temp;
+      setFields(newFields);
+    }
+  };
+
+  const onDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    // For Firefox compatibility
+    e.dataTransfer.setData("text/html", e.target.parentNode);
+  };
+
+  const onDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newFields = [...fields];
+    const item = newFields[draggedIndex];
+    newFields.splice(draggedIndex, 1);
+    newFields.splice(index, 0, item);
+    
+    setDraggedIndex(index);
+    setFields(newFields);
+  };
+
   return (
     <div className="pdf-mapper">
       <div className="sidebar">
@@ -142,12 +175,21 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
         </button>
 
         <div className="fields-list">
-          {fields.map((field) => (
-            <div key={field.id} className="field-item">
+          {fields.map((field, index) => (
+            <div 
+              key={field.id} 
+              className={`field-item ${draggedIndex === index ? 'dragging' : ''}`}
+              draggable
+              onDragStart={(e) => onDragStart(e, index)}
+              onDragOver={(e) => onDragOver(e, index)}
+              onDragEnd={() => setDraggedIndex(null)}
+            >
+              <div className="field-number">{index + 1}</div>
               <input 
                 value={field.name}
                 onChange={(e) => updateFieldName(field.id, e.target.value)}
                 placeholder="Nombre del campo"
+                title="Arrastra para reordenar"
               />
               <button 
                 className="btn-icon danger" 
