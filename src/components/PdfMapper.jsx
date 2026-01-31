@@ -11,6 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 const PdfMapper = ({ onSave, initialFields, onCancel }) => {
   const [numPages, setNumPages] = useState(null);
   const [fields, setFields] = useState(initialFields || []);
+  const [selectedFieldIds, setSelectedFieldIds] = useState([]);
   const [isSelecting, setIsSelecting] = useState(false);
   const [error, setError] = useState(null);
   const containerRef = useRef(null);
@@ -36,13 +37,16 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
         const deltaX = e.clientX - draggingField.startX;
         const deltaY = e.clientY - draggingField.startY;
 
-        setFields(fields.map(f => 
-          f.id === draggingField.id ? { 
-            ...f, 
-            x: draggingField.originalX + deltaX, 
-            y: draggingField.originalY + deltaY 
-          } : f
-        ));
+        setFields(prevFields => prevFields.map(f => {
+          if (draggingField.initialPositions && draggingField.initialPositions[f.id]) {
+             return { 
+               ...f, 
+               x: draggingField.initialPositions[f.id].x + deltaX, 
+               y: draggingField.initialPositions[f.id].y + deltaY 
+             };
+          }
+          return f;
+        }));
       } else if (resizingField) {
         const deltaX = e.clientX - resizingField.startX;
         const deltaY = e.clientY - resizingField.startY;
@@ -75,7 +79,15 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
 
   const handlePageClick = (e, pageIndex) => {
     // Prevent creating field if we just finished dragging
-    if (!isSelecting || draggingField) return;
+    if (draggingField) return;
+
+    // If not adding a new field, clicking background deselects everything
+    if (!isSelecting) {
+      if (!e.ctrlKey && !e.shiftKey) {
+        setSelectedFieldIds([]);
+      }
+      return;
+    }
 
     const rect = e.target.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -99,12 +111,52 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
 
   const startDrag = (e, field) => {
     e.stopPropagation();
+    
+    let newSelectedIds = [...selectedFieldIds];
+    const isMultiSelect = e.ctrlKey || e.metaKey || e.shiftKey;
+
+    // Selection Logic on Mouse Down
+    if (isMultiSelect) {
+      if (newSelectedIds.includes(field.id)) {
+        // Toggle off? Only if we are NOT about to drag? 
+        // Actually, standard behavior is toggle. But if I toggle off, I shouldn't drag it.
+        // Let's toggle only if we are strictly clicking. Validating drag vs click is hard on mousedown.
+        // Simplified: If dragging, we assume we want to keep it selected.
+        // But for true toggle, we might need to properly handle click event.
+        // For now: If modifiers are pressed, we TOGGLE.
+         if (newSelectedIds.includes(field.id)) {
+             newSelectedIds = newSelectedIds.filter(id => id !== field.id);
+         } else {
+             newSelectedIds.push(field.id);
+         }
+      } else {
+         newSelectedIds.push(field.id);
+      }
+    } else {
+      // No modifier
+      if (!newSelectedIds.includes(field.id)) {
+        // If clicking a new field (not currently selected), select ONLY it
+        newSelectedIds = [field.id];
+      }
+      // If clicking an already selected field, keep selection as is (to allow group drag)
+    }
+
+    setSelectedFieldIds(newSelectedIds);
+
+    // Prepare initial positions for the ENTIRE selection group
+    // (Only if the clicked field ended up being selected. If we toggled it off, we shouldn't drag it)
+    if (!newSelectedIds.includes(field.id)) return;
+
+    const initialPositions = {};
+    fields.filter(f => newSelectedIds.includes(f.id)).forEach(f => {
+      initialPositions[f.id] = { x: f.x, y: f.y };
+    });
+
     setDraggingField({
       id: field.id,
       startX: e.clientX,
       startY: e.clientY,
-      originalX: field.x,
-      originalY: field.y
+      initialPositions // Store map of all initial positions
     });
   };
 
@@ -232,6 +284,28 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
                     >
                       X
                     </button>
+                  </div>
+                  
+                  <div className="field-advanced-options" style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <label style={{ fontSize: '10px', color: '#666' }}>Ben. #:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      placeholder="0"
+                      value={field.beneficiaryIndex || ''}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setFields(fields.map(f => f.id === field.id ? { 
+                          ...f, 
+                          beneficiaryIndex: val > 0 ? val : undefined,
+                          section: val > 0 ? 'beneficiario' : 'cotizante'
+                        } : f));
+                      }}
+                      className="order-input"
+                      title="Índice de Beneficiario (0 para Cotizante)"
+                      style={{ width: '40px' }}
+                    />
                   </div>
                 </div>
                 <div className="field-actions">
@@ -387,8 +461,10 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
                         width: field.width,
                         height: field.height,
                         cursor: 'grab',
-                        backgroundColor: (draggingField?.id === field.id || resizingField?.id === field.id) 
+                        backgroundColor: (draggingField?.id === field.id || resizingField?.id === field.id || selectedFieldIds.includes(field.id)) 
                           ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255, 226, 88, 0.4)',
+                        border: selectedFieldIds.includes(field.id) ? '2px solid #2563eb' : '1px solid #78350f',
+                        zIndex: selectedFieldIds.includes(field.id) ? 10 : 1,
                         fontSize: `${Math.min(14, Math.max(8, field.height * 0.5))}px`,
                         display: 'flex',
                         alignItems: 'center',

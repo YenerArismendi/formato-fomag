@@ -113,7 +113,8 @@ const PdfForm = ({ fields, onEdit }) => {
     const groupFields = groupedFields[groupId].fields;
     const newData = { ...formData };
     groupFields.forEach(f => {
-      newData[f.id] = f.id === selectedFieldId;
+      // Robust comparison handling numeric IDs vs string values from DOM
+      newData[f.id] = String(f.id) === String(selectedFieldId);
     });
     setFormData(newData);
   };
