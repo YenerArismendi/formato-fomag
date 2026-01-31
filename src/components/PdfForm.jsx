@@ -1,12 +1,28 @@
 
 import { useState } from 'react';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { Download, Edit2 } from 'lucide-react';
+import { Download, Edit2, Users, Plus, Minus, UserCheck } from 'lucide-react';
 
 const PdfForm = ({ fields, onEdit }) => {
+  const [numBeneficiaries, setNumBeneficiaries] = useState(0);
+
   const [formData, setFormData] = useState(
     fields.reduce((acc, field) => ({ ...acc, [field.id]: '' }), {})
   );
+
+  const activeFields = fields.filter(f => {
+    // Robust detection: use property if exists, otherwise check name (for legacy storage)
+    const isBeneficiary = f.beneficiaryIndex !== undefined || 
+                         f.section === 'beneficiario' || 
+                         f.name.toLowerCase().includes('beneficiario') ||
+                         f.groupId?.includes('beneficiario');
+    
+    if (!isBeneficiary) return true; // Cotizante
+    
+    // For legacy data without index, assume it's the first one
+    const bIndex = f.beneficiaryIndex || 1;
+    return bIndex <= numBeneficiaries;
+  });
 
   const handleDownload = async () => {
     try {
@@ -18,26 +34,46 @@ const PdfForm = ({ fields, onEdit }) => {
       const pages = pdfDoc.getPages();
 
       // Draw text for each field
-      fields.forEach(field => {
+      activeFields.forEach(field => {
         const page = pages[field.page];
         const { width, height } = page.getSize();
         const scale = width / 800; 
 
-        const text = formData[field.id] || '';
-        const value = field.type === 'checkbox' ? (formData[field.id] ? 'X' : '') : text;
-        
-        if (field.type === 'checkbox' && !formData[field.id]) return;
+        let valueToDraw = '';
+        if (field.type === 'checkbox') {
+          // Robust check for truthy values (Boolean true, 'on', 'X', or matching ID from select)
+          const val = formData[field.id];
+          if (val === true || val === 'on' || val === 'X' || val === field.id) {
+            valueToDraw = 'X';
+          } else {
+            return;
+          }
+        } else if (field.type === 'date') {
+          const dateVal = formData[field.id];
+          if (dateVal) {
+            const [year, month, day] = dateVal.split('-');
+            valueToDraw = `${day}/${month}/${year}`;
+          }
+        } else {
+          valueToDraw = formData[field.id] || '';
+        }
+
+        if (!valueToDraw) return;
 
         const fontSize = 9 * scale;
-        const textToDraw = field.type === 'checkbox' ? 'X' : text;
-        const textWidth = helveticaBold.widthOfTextAtSize(textToDraw, fontSize);
+        const textWidth = helveticaBold.widthOfTextAtSize(valueToDraw, fontSize);
         const fieldWidth = field.width * scale;
+        const fieldHeight = field.height * scale;
         
+        // Horizontal centering
         const centeredX = (field.x * scale) + (fieldWidth / 2) - (textWidth / 2);
+        
+        // Vertical centering (approximate font baseline at ~1/3 from bottom of height)
+        const centeredY = height - (field.y * scale) - (fieldHeight / 2) - (fontSize / 4);
 
-        page.drawText(textToDraw, {
+        page.drawText(valueToDraw, {
           x: centeredX,
-          y: height - (field.y * scale) - (12 * scale), 
+          y: centeredY,
           size: fontSize,
           font: helveticaBold,
           color: rgb(0, 0, 0),
@@ -56,6 +92,32 @@ const PdfForm = ({ fields, onEdit }) => {
     }
   };
 
+  // Group fields by groupId
+  const groupedFields = activeFields.reduce((acc, field) => {
+    if (field.groupId) {
+      if (!acc[field.groupId]) {
+        acc[field.groupId] = {
+          isGroup: true,
+          label: field.groupLabel,
+          fields: []
+        };
+      }
+      acc[field.groupId].fields.push(field);
+    } else {
+      acc[field.id] = field;
+    }
+    return acc;
+  }, {});
+
+  const handleGroupChange = (groupId, selectedFieldId) => {
+    const groupFields = groupedFields[groupId].fields;
+    const newData = { ...formData };
+    groupFields.forEach(f => {
+      newData[f.id] = f.id === selectedFieldId;
+    });
+    setFormData(newData);
+  };
+
   return (
     <div className="pdf-form-container">
       <div className="form-card">
@@ -68,26 +130,157 @@ const PdfForm = ({ fields, onEdit }) => {
         </div>
 
         <div className="form-grid">
-          {fields.map(field => (
-            <div key={field.id} className={`form-group ${field.type === 'checkbox' ? 'as-checkbox' : ''}`}>
-              <label>{field.name}</label>
-              {field.type === 'checkbox' ? (
-                <div className="checkbox-wrapper">
-                  <input
-                    type="checkbox"
-                    checked={formData[field.id] || false}
-                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
-                  />
-                  <span>Marcar con X</span>
+          <div className="form-section-header">
+            <UserCheck size={18} />
+            <span>Información del Cotizante</span>
+          </div>
+
+          {Object.entries(groupedFields).map(([key, item]) => {
+            const isBeneficiaryField = (item.isGroup ? item.fields[0] : item).beneficiaryIndex;
+            if (isBeneficiaryField) return null; // Handle beneficiaries separately below
+
+            if (item.isGroup) {
+              const selectedValue = item.fields.find(f => formData[f.id] === true)?.id || "";
+              return (
+                <div key={key} className="form-group group-container compact-select">
+                  <label className="group-label">{item.label}</label>
+                  <select
+                    value={selectedValue}
+                    onChange={(e) => handleGroupChange(key, e.target.value)}
+                    className="compact-dropdown"
+                  >
+                    <option value="">Seleccione una opción...</option>
+                    {item.fields.map(field => (
+                      <option key={field.id} value={field.id}>
+                        {field.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                <input
-                  type="text"
-                  value={formData[field.id] || ''}
-                  onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                  placeholder={`Ingrese ${field.name}`}
-                />
-              )}
+              );
+            }
+
+            const field = item;
+            const isCheckbox = field.type === 'checkbox';
+            const isDate = field.type === 'date';
+
+            return (
+              <div key={field.id} className={`form-group ${isCheckbox ? 'as-checkbox' : ''}`}>
+                <label title={field.name}>{field.name}</label>
+                {isCheckbox ? (
+                  <div className="checkbox-wrapper">
+                    <input
+                      type="checkbox"
+                      checked={formData[field.id] === true}
+                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
+                    />
+                    <span>Marcar con X</span>
+                  </div>
+                ) : (
+                  <input
+                    type={isDate ? "date" : "text"}
+                    value={formData[field.id] || ''}
+                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                    placeholder={isDate ? "" : `Ingrese ${field.name}`}
+                    className={isDate ? "date-input" : ""}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          <div className="beneficiaries-config-card">
+            <div className="config-header">
+              <div className="config-title">
+                <Users size={18} />
+                <h3>Ingresar Beneficiarios</h3>
+              </div>
+              <div className="config-controls">
+                <span className="count-label">Beneficiarios activos: <strong>{numBeneficiaries}</strong></span>
+                <div className="counter-btns">
+                  {numBeneficiaries < 6 && (
+                    <button 
+                      className="btn-success small-add"
+                      onClick={() => setNumBeneficiaries(prev => prev + 1)}
+                    >
+                      <Plus size={16} />
+                      Agregar Beneficiario
+                    </button>
+                  )}
+                  {numBeneficiaries > 0 && (
+                    <button 
+                      className="btn-danger-outline small-add"
+                      onClick={() => setNumBeneficiaries(prev => prev - 1)}
+                    >
+                      <Minus size={16} />
+                      Quitar Último
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {[1, 2, 3, 4, 5, 6].slice(0, numBeneficiaries).map(bIdx => (
+            <div key={`b-section-${bIdx}`} className="beneficiary-render-group">
+              <div className="form-section-header beneficiario">
+                <Users size={18} />
+                <span>Beneficiario {bIdx}</span>
+              </div>
+              
+              {Object.entries(groupedFields).filter(([_, item]) => {
+                const f = item.isGroup ? item.fields[0] : item;
+                return f.beneficiaryIndex === bIdx;
+              }).map(([key, item]) => {
+                if (item.isGroup) {
+                  const selectedValue = item.fields.find(f => formData[f.id] === true)?.id || "";
+                  return (
+                    <div key={key} className="form-group group-container compact-select">
+                      <label className="group-label">{item.label}</label>
+                      <select
+                        value={selectedValue}
+                        onChange={(e) => handleGroupChange(key, e.target.value)}
+                        className="compact-dropdown"
+                      >
+                        <option value="">Seleccione una opción...</option>
+                        {item.fields.map(field => (
+                          <option key={field.id} value={field.id}>
+                            {field.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+
+                const field = item;
+                const isCheckbox = field.type === 'checkbox';
+                const isDate = field.type === 'date';
+
+                return (
+                  <div key={field.id} className={`form-group ${isCheckbox ? 'as-checkbox' : ''}`}>
+                    <label title={field.name}>{field.name}</label>
+                    {isCheckbox ? (
+                      <div className="checkbox-wrapper">
+                        <input
+                          type="checkbox"
+                          checked={formData[field.id] === true}
+                          onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
+                        />
+                        <span>Marcar con X</span>
+                      </div>
+                    ) : (
+                      <input
+                        type={isDate ? "date" : "text"}
+                        value={formData[field.id] || ''}
+                        onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                        placeholder={isDate ? "" : `Ingrese ${field.name}`}
+                        className={isDate ? "date-input" : ""}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

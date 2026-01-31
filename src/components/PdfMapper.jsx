@@ -1,7 +1,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { Plus, Trash2, Download, FileText, Check } from 'lucide-react';
+import { Plus, Trash2, Download, FileText, Check, Copy } from 'lucide-react';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -150,9 +150,33 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
   };
 
   const toggleFieldType = (id) => {
-    setFields(fields.map(f => 
-      f.id === id ? { ...f, type: f.type === 'checkbox' ? 'text' : 'checkbox' } : f
-    ));
+    setFields(fields.map(f => f.id === id ? { 
+      ...f, 
+      type: f.type === 'checkbox' ? 'text' : 'checkbox' 
+    } : f));
+  };
+
+  const duplicateField = (field) => {
+    const newField = {
+      ...field,
+      id: Date.now() + Math.random(),
+      x: field.x + 15,
+      y: field.y + 15
+    };
+    setFields([...fields, newField]);
+  };
+
+  const updateFieldOrder = (id, newOrder) => {
+    const index = parseInt(newOrder) - 1;
+    if (isNaN(index) || index < 0 || index >= fields.length) return;
+    
+    const oldIndex = fields.findIndex(f => f.id === id);
+    if (oldIndex === -1 || oldIndex === index) return;
+    
+    const newFields = [...fields];
+    const [movedField] = newFields.splice(oldIndex, 1);
+    newFields.splice(index, 0, movedField);
+    setFields(newFields);
   };
 
   return (
@@ -171,45 +195,62 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
 
         <div className="fields-list">
           {fields.map((field, index) => (
-            <div 
-              key={field.id} 
-              className={`field-item ${draggedIndex === index ? 'dragging' : ''} ${field.type === 'checkbox' ? 'type-checkbox' : ''}`}
-              draggable
-              onDragStart={(e) => onDragStart(e, index)}
-              onDragOver={(e) => onDragOver(e, index)}
-              onDragEnd={() => setDraggedIndex(null)}
-            >
-              <div className="field-number">{index + 1}</div>
-              <div className="field-content-box">
-                <input 
-                  value={field.name}
-                  onChange={(e) => updateFieldName(field.id, e.target.value)}
-                  placeholder="Nombre del campo"
-                  title="Arrastra para reordenar"
-                />
-                <div className="field-type-toggle">
+              <div 
+                key={field.id} 
+                className={`field-item ${draggedIndex === index ? 'dragging' : ''}`}
+                draggable
+                onDragStart={(e) => onDragStart(e, index)}
+                onDragOver={(e) => onDragOver(e, index)}
+                onDragEnd={() => setDraggedIndex(null)}
+              >
+                <div className="field-order-control">
+                  <input
+                    type="number"
+                    className="order-input"
+                    value={index + 1}
+                    onChange={(e) => updateFieldOrder(field.id, e.target.value)}
+                    min="1"
+                    max={fields.length}
+                  />
+                </div>
+                <div className="field-content-box">
+                  <input 
+                    type="text" 
+                    value={field.name}
+                    onChange={(e) => updateFieldName(field.id, e.target.value)}
+                  />
+                  <div className="field-type-toggle">
+                    <button 
+                      className={`type-btn ${field.type !== 'checkbox' ? 'active' : ''}`}
+                      onClick={() => toggleFieldType(field.id)}
+                    >
+                      Texto
+                    </button>
+                    <button 
+                      className={`type-btn ${field.type === 'checkbox' ? 'active' : ''}`}
+                      onClick={() => toggleFieldType(field.id)}
+                    >
+                      X
+                    </button>
+                  </div>
+                </div>
+                <div className="field-actions">
                   <button 
-                    className={`type-btn ${field.type !== 'checkbox' ? 'active' : ''}`}
-                    onClick={() => setFields(fields.map(f => f.id === field.id ? { ...f, type: 'text' } : f))}
+                    className="btn-icon" 
+                    onClick={() => duplicateField(field)}
+                    title="Duplicar"
                   >
-                    T
+                    <Copy size={16} />
                   </button>
                   <button 
-                    className={`type-btn ${field.type === 'checkbox' ? 'active' : ''}`}
-                    onClick={() => setFields(fields.map(f => f.id === field.id ? { ...f, type: 'checkbox' } : f))}
-                    title="Marca (X)"
+                    className="btn-icon danger" 
+                    onClick={() => removeField(field.id)}
+                    title="Eliminar"
                   >
-                    X
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
-              <button 
-                className="btn-icon danger" 
-                onClick={() => removeField(field.id)}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
           ))}
           
           {fields.length === 0 && (
@@ -347,10 +388,23 @@ const PdfMapper = ({ onSave, initialFields, onCancel }) => {
                         height: field.height,
                         cursor: 'grab',
                         backgroundColor: (draggingField?.id === field.id || resizingField?.id === field.id) 
-                          ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255, 226, 88, 0.4)'
+                          ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255, 226, 88, 0.4)',
+                        fontSize: `${Math.min(14, Math.max(8, field.height * 0.5))}px`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                     >
-                      <span>{field.name}</span>
+                      <span style={{ 
+                        width: '100%', 
+                        textAlign: 'center', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        padding: '0 4px'
+                      }}>
+                        {field.name}
+                      </span>
                       <div 
                         className="resize-handle" 
                         onMouseDown={(e) => startResize(e, field)}
