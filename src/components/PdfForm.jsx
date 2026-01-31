@@ -256,7 +256,17 @@ const PdfForm = ({ fields, onEdit }) => {
 
                 const field = item;
                 const isCheckbox = field.type === 'checkbox';
-                const isDate = field.type === 'date';
+                
+                // Helper to infer input type
+                const getInputType = (f) => {
+                  if (f.type === 'date') return 'date';
+                  const n = f.name.toLowerCase();
+                  if (n.includes('email') || n.includes('correo')) return 'email';
+                  if (n.includes('tel') || n.includes('cel') || n.includes('fijo')) return 'tel';
+                  return 'text';
+                };
+                
+                const inputType = getInputType(field);
 
                 return (
                   <div key={field.id} className={`form-group ${isCheckbox ? 'as-checkbox' : ''}`}>
@@ -272,11 +282,12 @@ const PdfForm = ({ fields, onEdit }) => {
                       </div>
                     ) : (
                       <input
-                        type={isDate ? "date" : "text"}
+                        type={inputType}
                         value={formData[field.id] || ''}
                         onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                        placeholder={isDate ? "" : `Ingrese ${field.name}`}
-                        className={isDate ? "date-input" : ""}
+                        placeholder={inputType === 'date' ? "" : `Ingrese ${field.name}`}
+                        className={inputType === 'date' ? "date-input" : ""}
+                        inputMode={inputType === 'tel' ? 'numeric' : undefined}
                       />
                     )}
                   </div>
